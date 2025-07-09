@@ -6,7 +6,6 @@ function Signup() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState('mentor');
-  const [groupName, setGroupName] = useState('');
   const [emailError, setEmailError] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [serverMessage, setServerMessage] = useState('');
@@ -20,15 +19,9 @@ function Signup() {
       return;
     }
 
-    // Validate password (optional)
+    // Validate password
     if (password.length < 6) {
       setPasswordError('Password should be at least 6 characters long.');
-      return;
-    }
-
-    // Validate group name if role is mentee
-    if (role === 'mentee' && !groupName.trim()) {
-      setServerMessage('Please enter a group name.');
       return;
     }
 
@@ -36,20 +29,13 @@ function Signup() {
       const response = await axios.post('http://localhost:5000/api/signup', {
         email,
         password,
-        role,
-        groupName: role === 'mentee' ? groupName : undefined, // Only send groupName if role is mentee
+        role
       });
 
       setServerMessage(response.data.message);
       setEmail('');
       setPassword('');
       setRole('mentor');
-      setGroupName(''); // Reset group name
-      
-      // Store groupName in localStorage if role is mentee
-      if (role === 'mentee') {
-        localStorage.setItem('groupName', groupName);
-      }
     } catch (error) {
       if (error.response && error.response.data.message) {
         setServerMessage(error.response.data.message);
@@ -124,22 +110,6 @@ function Signup() {
               <option value="hod">HOD</option>
             </select>
           </div>
-
-          {role === 'mentee' && (
-            <div className="mb-4">
-              <label htmlFor="groupName" className="block text-sm font-medium">
-                Group Name
-              </label>
-              <input
-                id="groupName"
-                type="text"
-                placeholder="Enter your Group Name"
-                value={groupName}
-                onChange={(e) => setGroupName(e.target.value)}
-                className="w-full px-3 py-2 border rounded-md outline-none"
-              />
-            </div>
-          )}
 
           <div className="mb-4">
             <button

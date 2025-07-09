@@ -1,8 +1,10 @@
-const mongoose = require("mongoose");
+// models/Project.js
+const mongoose = require('mongoose');
 
 const projectSchema = new mongoose.Schema({
-  name: { type: String, required: true },
-  mentee_email: { type: String, required: true }
-});
+  projectName: String,
+  mentorEmail: String,
+  menteeEmail: String,
+}, { timestamps: true });
 
-module.exports = mongoose.model("Project", projectSchema);
+module.exports = mongoose.model('Project', projectSchema);

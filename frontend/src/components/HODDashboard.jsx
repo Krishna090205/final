@@ -1,82 +1,112 @@
-import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useEffect, useState } from "react";
+import axios from "axios";
 
-function HODDashboard() {
+const HodDashboard = () => {
   const [mentors, setMentors] = useState([]);
-  const [selectedMentor, setSelectedMentor] = useState(null);
-  const navigate = useNavigate();
+  const [mentees, setMentees] = useState([]);
+  const [projects, setProjects] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetch('http://localhost:5173/api/mentors-projects')
-      .then((res) => res.json())
-      .then((data) => setProjects(data))
-      .catch((err) => console.error("Error fetching mentor projects:", err));
-  }, []);
-  
+  const fetchData = async () => {
+    try {
+      const [mentorRes, menteeRes, projectRes] = await Promise.all([
+        axios.get("http://localhost:5000/api/mentors"),
+        axios.get("http://localhost:5000/api/mentees"),
+        axios.get("http://localhost:5000/api/hod/project-details"),
+      ]);
 
-  const handleLogout = () => {
-    localStorage.removeItem('user');
-    navigate('/login');
+      setMentors(mentorRes.data.data);
+      setMentees(menteeRes.data.data);
+      setProjects(projectRes.data.data);
+    } catch (err) {
+      alert("Error loading data");
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
   };
 
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const handleLogout = () => {
+    alert("Logged out successfully!");
+    window.location.href = "/"; // Redirect to login or home
+  };
+
+  if (loading) return <p className="text-center mt-10">Loading...</p>;
+
   return (
-    <div className="flex h-screen bg-gray-800 text-white">
-      {/* Fixed Sidebar */}
-      <div className="fixed left-0 top-0 h-full w-64 bg-gray-900 p-4">
-        <h3 className="text-lg font-bold mb-4">HOD Dashboard</h3>
-        <ul>
-          {mentors.map(mentor => (
-            <li 
-              key={mentor.id} 
-              className="cursor-pointer p-2 mb-2 bg-gray-700 rounded-md hover:bg-gray-600"
-              onClick={() => setSelectedMentor(mentor)}
-            >
-              {mentor.name}
-            </li>
-          ))}
-        </ul>
-        
-        {/* Logout Button Moved to Sidebar */}
-        <div className="mt-8">
-          <button 
-            onClick={handleLogout} 
-            className="w-full py-2 px-4 bg-red-500 text-white rounded-md"
-          >
-            Logout
-          </button>
-        </div>
+    <div className="min-h-screen bg-gray-100 p-8">
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-2xl font-bold">HOD Dashboard</h1>
+        <button
+          className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
+          onClick={handleLogout}
+        >
+          Logout
+        </button>
       </div>
 
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col items-center justify-center p-8 ml-64">
-        <div className="w-full max-w-3xl p-8 bg-white text-gray-900 shadow-lg rounded-lg">
-          <h2 className="text-xl font-bold mb-6">Mentors</h2>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {/* Mentors */}
+        <div className="bg-white p-4 rounded shadow">
+          <h2 className="text-xl font-semibold mb-2">Mentors</h2>
+          <ul className="space-y-1">
+            {mentors.map((m) => (
+              <li key={m._id} className="text-gray-800">
+                {m.name} ({m.email})
+              </li>
+            ))}
+          </ul>
+        </div>
 
-          {/* Selected Mentor Details */}
-          {selectedMentor ? (
-            <div>
-              <h3 className="text-lg font-semibold mb-4">{selectedMentor.name}'s Projects</h3>
-              <ul>
-                {selectedMentor.projects.map((project, index) => (
-                  <li key={index} className="mb-4 p-4 bg-gray-100 rounded-md">
-                    <h4 className="font-semibold mb-2">{project.name}</h4>
-                    <p>Members:</p>
-                    <ul>
-                      {project.members.map((member, i) => (
-                        <li key={i} className="ml-4">{member}</li>
-                      ))}
-                    </ul>
-                  </li>
-                ))}
-              </ul>
-            </div>
+        {/* Mentees */}
+        <div className="bg-white p-4 rounded shadow">
+          <h2 className="text-xl font-semibold mb-2">Mentees</h2>
+          <ul className="space-y-1">
+            {mentees.map((m) => (
+              <li key={m._id} className="text-gray-800">
+                {m.name} ({m.email})
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        {/* Projects */}
+        <div className="bg-white p-4 rounded shadow col-span-1 md:col-span-3">
+          <h2 className="text-xl font-semibold mb-4">All Projects</h2>
+          {projects.length === 0 ? (
+            <p>No projects found.</p>
           ) : (
-            <p>Select a mentor to view details</p>
+            <table className="w-full table-auto border-collapse">
+              <thead>
+                <tr className="bg-gray-200">
+                  <th className="p-2 border">Project Name</th>
+                  <th className="p-2 border">Mentor</th>
+                  <th className="p-2 border">Mentee</th>
+                </tr>
+              </thead>
+              <tbody>
+                {projects.map((p, index) => (
+                  <tr key={index} className="border-t">
+                    <td className="p-2 border">{p.projectName}</td>
+                    <td className="p-2 border">
+                      {p.mentor?.name} ({p.mentor?.email})
+                    </td>
+                    <td className="p-2 border">
+                      {p.mentee?.name} ({p.mentee?.email})
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           )}
         </div>
       </div>
     </div>
   );
-}
+};
 
-export default HODDashboard;
+export default HodDashboard;

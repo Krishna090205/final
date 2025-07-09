@@ -2,14 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 function MenteeDashboard() {
-  const [activeSections, setActiveSections] = useState(['ideaPresentation']);
   const [uploads, setUploads] = useState({});
-  const [selectedSection, setSelectedSection] = useState('ideaPresentation');
   const [groupName, setGroupName] = useState('');
   const navigate = useNavigate();
 
   const sections = {
-    "ideaPresentation": { label: "Idea Presentation", allowedTypes: ["ppt", "pptx"], required: [] },
+    "ideaPresentation": { label: "Idea Presentation", allowedTypes: ["pdf"], required: [] },
     "progress1": { label: "Progress 1", allowedTypes: ["ppt", "pdf"], required: ["ideaPresentation"] },
     "progress2": { label: "Progress 2", allowedTypes: ["ppt", "pdf"], required: ["progress1"] },
     "phase1": { label: "Phase 1 Report", allowedTypes: ["pdf"], required: ["progress1", "progress2"] },
@@ -17,50 +15,38 @@ function MenteeDashboard() {
     "progress4": { label: "Progress 4", allowedTypes: ["ppt", "pdf"], required: ["progress3"] },
     "finalReport": { label: "Final Report", allowedTypes: ["pdf"], required: ["progress3", "progress4"] },
     "finalDemo": { label: "Final Demo", allowedTypes: ["mp4", "mkv"], required: ["finalReport"] },
-    "finalPpt": { label: "Final PPT", allowedTypes: ["ppt", "pptx"], required: ["finalDemo"] },
+    "finalPpt": { label: "Final PPT", allowedTypes: ["pdf"], required: ["finalDemo"] },
+    "codebook": { label: "Codebook", allowedTypes: ["docs","pdf"], required: ["finalPpt"] },
+    "achievements": { label: "Achievements", allowedTypes: ["pdf","txt","docs"], required: ["codebook"] },
   };
 
   useEffect(() => {
     const storedUploads = JSON.parse(localStorage.getItem('uploads')) || {};
-    setUploads(storedUploads);
-
     const storedGroupName = localStorage.getItem('groupName') || '';
+    setUploads(storedUploads);
     setGroupName(storedGroupName);
-
-    const unlockedSections = Object.keys(sections).filter((key) =>
-      sections[key].required.every((req) => storedUploads[req])
-    );
-
-    setActiveSections(unlockedSections);
   }, []);
 
-  const handleSectionClick = (section) => {
-    if (activeSections.includes(section)) {
-      setSelectedSection(section);
-    } else {
-      alert(`${sections[section].label} is not accessible yet.`);
-    }
-  };
+  const isSectionActive = (section) =>
+    sections[section].required.every(req => uploads[req]);
 
-  const handleFileUpload = (event) => {
-    const file = event.target.files[0];
+  const handleFileChange = (e, section) => {
+    const file = e.target.files[0];
     if (!file) return;
 
-    const allowedTypes = sections[selectedSection].allowedTypes;
     const fileExtension = file.name.split('.').pop().toLowerCase();
+    const allowed = sections[section].allowedTypes;
 
-    if (!allowedTypes.includes(fileExtension)) {
-      alert(`Invalid file type! Allowed types: ${allowedTypes.join(', ')}`);
+    if (!allowed.includes(fileExtension)) {
+      alert(`Allowed file types: ${allowed.join(', ')}`);
       return;
     }
 
-    // Convert File to URL for storage (Mentor will use this URL)
     const fileURL = URL.createObjectURL(file);
-
     const newUploads = {
       ...uploads,
-      [selectedSection]: {
-        fileURL, // Store only the file URL
+      [section]: {
+        fileURL,
         filename: file.name,
         timestamp: new Date().toLocaleString(),
         remark: "Pending Review",
@@ -69,46 +55,82 @@ function MenteeDashboard() {
 
     setUploads(newUploads);
     localStorage.setItem('uploads', JSON.stringify(newUploads));
+    alert(`${sections[section].label} uploaded successfully.`);
+  };
 
-    const unlockedSections = Object.keys(sections).filter((key) =>
-      sections[key].required.every((req) => newUploads[req])
-    );
-
-    setActiveSections(unlockedSections);
-    alert(`${sections[selectedSection].label} uploaded successfully.`);
+  const handleDeleteFile = (section) => {
+    const newUploads = { ...uploads };
+    delete newUploads[section];
+    setUploads(newUploads);
+    localStorage.setItem('uploads', JSON.stringify(newUploads));
+    alert(`${sections[section].label} file deleted.`);
   };
 
   return (
     <div className="flex min-h-screen bg-gray-800 text-white">
-      {/* Sidebar */}
       <div className="w-1/4 bg-gray-900 p-4">
         <h2 className="text-xl font-bold text-center mb-5">Mentee Dashboard</h2>
-        {groupName && <p className="text-center text-gray-300">Group: <span className="font-semibold">{groupName}</span></p>}
-        <div className="space-y-4 mt-4">
-          {Object.keys(sections).map((key) => (
-            <button
-              key={key}
-              onClick={() => handleSectionClick(key)}
-              className={`w-full py-2 px-4 text-left rounded transition-all ${
-                selectedSection === key ? 'bg-blue-600' : 'bg-gray-700'
-              } ${activeSections.includes(key) ? 'cursor-pointer' : 'opacity-50 cursor-not-allowed'}`}
-            >
-              {sections[key].label}
-            </button>
-          ))}
-          <button onClick={() => navigate('/login')} className="w-full py-2 px-4 bg-red-500 rounded">Logout</button>
-        </div>
+        <button onClick={() => navigate('/login')} className="w-full mt-5 py-2 px-4 bg-red-500 rounded">
+          Logout
+        </button>
       </div>
 
-      {/* Upload Section */}
       <div className="w-3/4 p-4 bg-white text-gray-900">
-        <p>Allowed File Types: {sections[selectedSection]?.allowedTypes.join(', ')}</p>
-        <input
-          type="file"
-          accept={sections[selectedSection]?.allowedTypes.map((ext) => `.${ext}`).join(', ')}
-          onChange={handleFileUpload}
-          className="w-full p-2 border rounded mt-2"
-        />
+        <table className="w-full border border-gray-300 text-center">
+          <thead className="bg-gray-200">
+            <tr>
+              <th className="border px-4 py-2">Section</th>
+              <th className="border px-4 py-2">Upload</th>
+              <th className="border px-4 py-2">Remark</th>
+              <th className="border px-4 py-2">Uploaded File</th>
+            </tr>
+          </thead>
+          <tbody>
+            {Object.keys(sections).map((section, index) => (
+              <tr key={index} className={`${!isSectionActive(section) && 'opacity-50'}`}>
+                <td className="border px-4 py-2 font-semibold">{sections[section].label}</td>
+                <td className="border px-4 py-2">
+                  <input
+                    type="file"
+                    accept={sections[section].allowedTypes.map(ext => `.${ext}`).join(',')}
+                    onChange={(e) => handleFileChange(e, section)}
+                    disabled={!isSectionActive(section)}
+                    className="text-sm"
+                  />
+                </td>
+                <td className="border px-4 py-2">
+                  {uploads[section]?.remark || "Pending"}
+                </td>
+                <td className="border px-4 py-2">
+                  {uploads[section] ? (
+                    <div className="flex flex-col items-center">
+                      <p className="text-sm">{uploads[section].filename}</p>
+                      <p className="text-xs text-gray-600">Uploaded on: {uploads[section].timestamp}</p>
+                      <div className="mt-1 flex gap-2">
+                        <a
+                          href={uploads[section].fileURL}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-600 underline text-sm"
+                        >
+                          View
+                        </a>
+                        <button
+                          onClick={() => handleDeleteFile(section)}
+                          className="text-red-600 text-sm underline"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <span className="text-gray-500">No file uploaded</span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );

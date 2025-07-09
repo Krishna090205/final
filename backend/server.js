@@ -2,193 +2,291 @@ const express = require("express");
 const bodyParser = require("body-parser");
 const cors = require("cors");
 const multer = require("multer");
-const { MongoClient, ObjectId, GridFSBucket } = require("mongodb");
-const path = require("path");
-const { GridFsStorage } = require("multer-gridfs-storage");
 const crypto = require("crypto");
+const path = require("path");
+const { MongoClient, ObjectId, GridFSBucket } = require("mongodb");
+const { GridFsStorage } = require("multer-gridfs-storage");
 
 const app = express();
-const port = 5000;
+const PORT = 5000;
+const mongoURI = "mongodb://127.0.0.1:27017";
+
 
 // Middleware
 app.use(bodyParser.json());
 app.use(cors());
 
-// MongoDB Connection
-const uri = "mongodb://127.0.0.1:27017";
-const client = new MongoClient(uri);
-let db, bucket;
+// MongoDB Setup
+const client = new MongoClient(mongoURI);
+let db, bucket, usersCollection, projectsCollection;
 
-client
-  .connect()
-  .then(() => {
+async function connectDB() {
+  try {
+    await client.connect();
     db = client.db("project_management");
     bucket = new GridFSBucket(db, { bucketName: "uploads" });
-    console.log("Connected to MongoDB with GridFS");
-  })
-  .catch((err) => console.error("Error connecting to MongoDB:", err));
+    usersCollection = db.collection("users");
+    projectsCollection = db.collection("projects");
+    console.log("✅ Connected to MongoDB with GridFS");
+  } catch (err) {
+    console.error("❌ MongoDB connection error:", err);
+  }
+}
+connectDB();
 
-/** ************ GridFS File Upload Setup ************ */
+// GridFS Storage
 const storage = new GridFsStorage({
-  url: uri + "/project_management",
-  file: (req, file) => {
-    return new Promise((resolve, reject) => {
+  url: mongoURI + "/project_management",
+  file: (req, file) =>
+    new Promise((resolve, reject) => {
       crypto.randomBytes(16, (err, buf) => {
         if (err) return reject(err);
         const filename = buf.toString("hex") + path.extname(file.originalname);
-        resolve({ filename, bucketName: "uploads", metadata: { projectId: req.body.projectId } });
+        resolve({
+          filename,
+          bucketName: "uploads",
+          metadata: {
+            projectId: req.body.projectId,
+            projectName: req.body.projectName || "", // added projectName to metadata
+          },
+        });
       });
-    });
-  },
+    }),
 });
-
 const upload = multer({ storage });
 
-/** ************ File Upload API ************ */
-app.post("/api/upload", upload.single("file"), async (req, res) => {
-  if (!req.file) {
-    return res.status(400).json({ success: false, message: "File upload failed" });
-  }
-  res.json({ success: true, message: "File uploaded successfully", fileId: req.file.id });
-});
+/*************** USER ROUTES ***************/
 
-/** ************ Fetch & Download Files ************ */
-app.get("/api/files", async (req, res) => {
-  try {
-    const files = await db.collection("uploads.files").find({}).toArray();
-    if (!files || files.length === 0) {
-      return res.status(404).json({ error: "No files found" });
-    }
-
-    const formattedFiles = files.map(file => ({
-      fileId: file._id,
-      filename: file.filename,
-      metadata: file.metadata || {}
-    }));
-
-    res.json({ success: true, files: formattedFiles });
-  } catch (error) {
-    console.error("Error fetching files:", error);
-    res.status(500).json({ error: "Failed to fetch files" });
-  }
-});
-
-app.get("/api/download/:fileId", async (req, res) => {
-  const { fileId } = req.params;
-  try {
-    const file = await db.collection("uploads.files").findOne({ _id: new ObjectId(fileId) });
-    if (!file) return res.status(404).json({ success: false, message: "File not found" });
-
-    res.set("Content-Disposition", `attachment; filename=${file.filename}`);
-    res.set("Content-Type", file.contentType);
-
-    const downloadStream = bucket.openDownloadStream(new ObjectId(fileId));
-    downloadStream.pipe(res);
-  } catch (err) {
-    res.status(500).json({ success: false, message: "Download failed" });
-  }
-});
-
-/** ************ Signup API ************ */
+// Signup
 app.post("/api/signup", async (req, res) => {
-  const { name, email, password, role } = req.body;
-
   try {
-    const existingUser = await db.collection("users").findOne({ email });
+    const { name, email, password, role, projectName } = req.body;
+    const normalizedEmail = email.toLowerCase();
+    const existingUser = await usersCollection.findOne({ email: normalizedEmail });
+
     if (existingUser) {
       return res.status(400).json({ success: false, message: "User already exists" });
     }
 
-    const newUser = { name, email, password, role };
-    const result = await db.collection("users").insertOne(newUser);
-    res.json({ success: true, message: "Signup successful", userId: result.insertedId });
+    const newUser = { name, email: normalizedEmail, password, role, projectName };
+    await usersCollection.insertOne(newUser);
+
+    res.status(201).json({ success: true, message: "User registered successfully" });
   } catch (err) {
-    console.error("Signup Error:", err);
+    console.error("Signup error:", err);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+});
+
+// Login
+app.post("/api/login", async (req, res) => {
+  const { email, password } = req.body;
+  const normalizedEmail = email.toLowerCase();
+
+  try {
+    const user = await usersCollection.findOne({ email: normalizedEmail });
+    if (!user) return res.status(400).json({ success: false, message: "User not found" });
+    if (user.password !== password) return res.status(400).json({ success: false, message: "Invalid password" });
+
+    res.json({ success: true, role: user.role, email: user.email, userId: user._id });
+  } catch (err) {
+    console.error("Login error:", err);
     res.status(500).json({ success: false, message: "Server error" });
   }
 });
 
-/** ************ Login API ************ */
-app.post("/api/login", async (req, res) => {
-    console.log("Login API hit");
-    const { email, password } = req.body;
-  
-    try {
-      const user = await db.collection("users").findOne({ email: email.toLowerCase() });
-  
-      if (!user) {
-        return res.status(400).json({ success: false, message: "User not found" });
-      }
-  
-      if (user.password !== password) {
-        return res.status(400).json({ success: false, message: "Invalid password" });
-      }
-  
-      res.json({ success: true, role: user.role, userId: user._id });
-  
-    } catch (err) {
-      console.error("Login Error:", err);
-      res.status(500).json({ success: false, message: "Server error" });
-    }
-  });
-  
-
-/** ************ Get Mentors API ************ */
+// Get mentors
 app.get("/api/mentors", async (req, res) => {
   try {
-    const mentors = await db.collection("users").find({ role: "mentor" }).toArray();
+    const mentors = await usersCollection.find({ role: "mentor" }).toArray();
     res.json({ success: true, data: mentors });
-  } catch (error) {
-    console.error("Error fetching mentors:", error);
-    res.status(500).json({ error: "Failed to fetch mentors" });
+  } catch (err) {
+    res.status(500).json({ success: false, message: "Failed to fetch mentors" });
   }
 });
 
-/** ************ Get Mentees API ************ */
+// Get mentees
 app.get("/api/mentees", async (req, res) => {
   try {
-    const mentees = await db.collection("users").find({ role: "mentee" }).toArray();
+    const mentees = await usersCollection.find({ role: "mentee" }).project({ name: 1, email: 1 }).toArray();
     res.json({ success: true, data: mentees });
-  } catch (error) {
-    console.error("Error fetching mentees:", error);
-    res.status(500).json({ error: "Failed to fetch mentees" });
+  } catch (err) {
+    res.status(500).json({ success: false, message: "Failed to fetch mentees" });
   }
 });
 
-/** ************ Get Projects API ************ */
-app.get("/api/projects", async (req, res) => {
-  try {
-    const projects = await db.collection("projects").find({}).toArray();
-    res.json({ success: true, data: projects });
-  } catch (error) {
-    console.error("Error fetching projects:", error);
-    res.status(500).json({ error: "Failed to fetch projects" });
-  }
-});
+/*************** PROJECT ROUTES ***************/
 
-/** ************ Assign Mentor API ************ */
-app.post("/api/assign-mentor", async (req, res) => {
-  const { mentorEmail, menteeEmail } = req.body;
+// Add project and assign mentor + mentee
+app.post("/api/add-project", async (req, res) => {
+  const { projectName, mentorEmail, menteeEmail } = req.body;
 
-  if (!mentorEmail || !menteeEmail) {
-    return res.status(400).json({ success: false, message: "Mentor and Mentee are required" });
+  if (!projectName || !mentorEmail || !menteeEmail) {
+    return res.status(400).json({ success: false, message: "All fields are required" });
   }
 
   try {
-    const mentor = await db.collection("users").findOne({ email: mentorEmail, role: "mentor" });
-    const mentee = await db.collection("users").findOne({ email: menteeEmail, role: "mentee" });
+    const mentor = await usersCollection.findOne({ email: mentorEmail, role: "mentor" });
+    const mentee = await usersCollection.findOne({ email: menteeEmail, role: "mentee" });
 
     if (!mentor || !mentee) {
       return res.status(400).json({ success: false, message: "Invalid mentor or mentee email" });
     }
 
-    await db.collection("assignments").insertOne({ mentorEmail, menteeEmail });
-    res.json({ success: true, message: "Mentor assigned successfully" });
+    const result = await projectsCollection.insertOne({
+      projectName,
+      mentorEmail,
+      menteeEmail,
+      createdAt: new Date(),
+    });
+
+    res.json({ success: true, message: "Project added successfully", projectId: result.insertedId });
   } catch (error) {
-    console.error("Error assigning mentor:", error);
-    res.status(500).json({ error: "Failed to assign mentor" });
+    console.error("Error adding project:", error);
+    res.status(500).json({ success: false, message: "Server error while adding project" });
   }
 });
 
-/** ************ Start Server ************ */
-app.listen(port, () => console.log(`🚀 Server running on port ${port}`));
+// Get all projects
+app.get("/api/projects", async (req, res) => {
+  try {
+    const projects = await projectsCollection.find({}).toArray();
+    res.json({ success: true, data: projects });
+  } catch (err) {
+    res.status(500).json({ success: false, message: "Failed to fetch projects" });
+  }
+});
+
+// Get mentor's projects
+app.get("/api/mentor-projects", async (req, res) => {
+  const { mentorEmail } = req.query;
+  if (!mentorEmail) {
+    return res.status(400).json({ success: false, message: "Mentor email is required" });
+  }
+
+  try {
+    const projects = await projectsCollection.find({ mentorEmail }).toArray();
+    res.json({ success: true, data: projects });
+  } catch (err) {
+    res.status(500).json({ success: false, message: "Failed to fetch mentor's projects" });
+  }
+});
+
+// HOD view: Project details with mentor + mentee
+app.get("/api/hod/project-details", async (req, res) => {
+  try {
+    const projects = await projectsCollection.find({}).toArray();
+    const detailed = await Promise.all(
+      projects.map(async (proj) => {
+        const mentor = await usersCollection.findOne({ email: proj.mentorEmail });
+        const mentee = await usersCollection.findOne({ email: proj.menteeEmail });
+        return {
+          projectName: proj.projectName,
+          mentor: mentor ? { name: mentor.name, email: mentor.email } : null,
+          mentee: mentee ? { name: mentee.name, email: mentee.email } : null,
+          createdAt: proj.createdAt,
+        };
+      })
+    );
+    res.json({ success: true, data: detailed });
+  } catch (err) {
+    res.status(500).json({ success: false, message: "Failed to fetch HOD project details" });
+  }
+});
+
+/*************** FILE ROUTES ***************/
+
+// Upload file
+app.post("/api/upload", upload.single("file"), (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ success: false, message: "File upload failed" });
+  }
+  res.json({
+    success: true,
+    message: "File uploaded successfully",
+    fileId: req.file.id,
+  });
+});
+
+// Get all uploaded files
+app.get("/api/files", async (req, res) => {
+  try {
+    const files = await db.collection("uploads.files").find({}).toArray();
+    if (!files.length) return res.status(404).json({ success: false, message: "No files found" });
+
+    const formattedFiles = files.map(file => ({
+      fileId: file._id,
+      filename: file.filename,
+      metadata: file.metadata || {},
+    }));
+
+    res.json({ success: true, files: formattedFiles });
+  } catch (err) {
+    res.status(500).json({ success: false, message: "Failed to fetch files" });
+  }
+});
+
+// Download file
+app.get("/api/download/:fileId", async (req, res) => {
+  const { fileId } = req.params;
+
+  try {
+    const file = await db.collection("uploads.files").findOne({ _id: new ObjectId(fileId) });
+    if (!file) return res.status(404).json({ success: false, message: "File not found" });
+
+    res.set("Content-Disposition", `attachment; filename="${file.filename}"`);
+    bucket.openDownloadStream(new ObjectId(fileId)).pipe(res);
+  } catch (err) {
+    res.status(500).json({ success: false, message: "Download failed" });
+  }
+});
+
+// Get files by projectId
+app.get("/api/project-files/:projectId", async (req, res) => {
+  const { projectId } = req.params;
+
+  try {
+    const files = await db.collection("uploads.files")
+      .find({ "metadata.projectId": projectId })
+      .toArray();
+
+    if (!files.length) {
+      return res.status(404).json({ success: false, message: "No files found for this project" });
+    }
+
+    const formatted = files.map(file => ({
+      fileId: file._id,
+      filename: file.filename,
+      metadata: file.metadata,
+    }));
+
+    res.json({ success: true, files: formatted });
+  } catch (err) {
+    res.status(500).json({ success: false, message: "Failed to fetch project files" });
+  }
+});
+
+// ✅ NEW: Get files by projectName
+app.get("/api/files/:projectName", async (req, res) => {
+  const { projectName } = req.params;
+
+  try {
+    const files = await db.collection("uploads.files")
+      .find({ "metadata.projectName": projectName })
+      .toArray();
+
+    if (!files || files.length === 0) {
+      return res.status(404).json({ success: false, message: "No files found" });
+    }
+
+    res.status(200).json({ success: true, data: files });
+  } catch (err) {
+    console.error("Error fetching files by projectName:", err);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+});
+
+// Start Server
+app.listen(PORT, () => {
+  console.log(`🚀 Server running at http://localhost:${PORT}`);
+});
