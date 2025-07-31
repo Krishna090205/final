@@ -5,7 +5,7 @@ function Navbar() {
   const navigate = useNavigate();  // Initialize navigate
 
   return (
-    <div className="max-w-screen-2x1 container mx-auto md:px-20 px-4 dark:bg-slate-900 dark:text-white fixed top-0 left-0 right-0">
+    <div className="max-w-screen-2x1 container mx-auto md:px-40 px-3 dark:bg-slate-1800 dark:text-white fixed top-0 left-0 right-0">
       <div className="navbar bg-base-100">
         <div className="navbar-start">
           <div className="dropdown">
@@ -20,7 +20,7 @@ function Navbar() {
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   strokeWidth="2"
-                  d="M4 6h16M4 12h8m-8 6h16" />
+                  d="M3 6h16M4 12h8m-8 6h16" />
               </svg>
             </div>
             <ul
@@ -29,17 +29,17 @@ function Navbar() {
               <li><a href="#">Home</a></li>
             </ul>
           </div>
-          <a className="text-4xl font-bold cursor-pointer">PROJECT REVIEW PLATFORM</a>
+          <a className="text-2xl font-bold cursor-pointer">PROJECT REVIEW PLATFORM</a>
         </div>
-        <div className="navbar-end space-x-3">
+        <div className="navbar-end space-x-2">
           <div className="navbar-center hidden lg:flex">
-            <ul className="menu menu-horizontal px-1">
+            <ul className="menu menu-horizontal px-2">
               <li><a href="#">Home</a></li>
             </ul>
           </div>
           <div>
             <a
-              className="bg-black text-white p-3.5 rounded-md hover:bg-slate-800 duration-300 cursor-pointer"
+              className="bg-black text-white p-2.5 rounded-md hover:bg-slate-800 duration-300 cursor-pointer"
               onClick={() => navigate('/login')}>
               Login
             </a>

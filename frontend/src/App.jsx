@@ -13,8 +13,9 @@ import Signup from './components/Signup';
 function App() {
   return (
     <Router>
+      <Navbar />
       <Routes>
-        <Route path="/" element={<><Navbar /><Banner /><Footer /></>} />
+        <Route path="/" element={<><Banner /><Footer /></>} />
         <Route path="/signup" element={<Signup />} />
         <Route path="/login" element={<Login />} />
         <Route path="/mentee-dashboard" element={<MenteeDashboard />} />

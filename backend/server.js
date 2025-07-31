@@ -9,8 +9,7 @@ const { GridFsStorage } = require("multer-gridfs-storage");
 
 const app = express();
 const PORT = 5000;
-const mongoURI = "mongodb://127.0.0.1:27017";
-
+const mongoURI = "mongodb+srv://durgeshpadwal729:sXJlfq3tzkf6cboD@cluster0.xsaskto.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0z";
 
 // Middleware
 app.use(bodyParser.json());
@@ -20,6 +19,7 @@ app.use(cors());
 const client = new MongoClient(mongoURI);
 let db, bucket, usersCollection, projectsCollection;
 
+// Connect to MongoDB and Start Server
 async function connectDB() {
   try {
     await client.connect();
@@ -28,6 +28,11 @@ async function connectDB() {
     usersCollection = db.collection("users");
     projectsCollection = db.collection("projects");
     console.log("✅ Connected to MongoDB with GridFS");
+
+    // Start the server only after DB is ready
+    app.listen(PORT, () => {
+      console.log(`🚀 Server running at http://localhost:${PORT}`);
+    });
   } catch (err) {
     console.error("❌ MongoDB connection error:", err);
   }
@@ -47,7 +52,7 @@ const storage = new GridFsStorage({
           bucketName: "uploads",
           metadata: {
             projectId: req.body.projectId,
-            projectName: req.body.projectName || "", // added projectName to metadata
+            projectName: req.body.projectName || "",
           },
         });
       });
@@ -266,7 +271,7 @@ app.get("/api/project-files/:projectId", async (req, res) => {
   }
 });
 
-// ✅ NEW: Get files by projectName
+// Get files by projectName
 app.get("/api/files/:projectName", async (req, res) => {
   const { projectName } = req.params;
 
@@ -284,9 +289,4 @@ app.get("/api/files/:projectName", async (req, res) => {
     console.error("Error fetching files by projectName:", err);
     res.status(500).json({ success: false, message: "Server error" });
   }
-});
-
-// Start Server
-app.listen(PORT, () => {
-  console.log(`🚀 Server running at http://localhost:${PORT}`);
 });
