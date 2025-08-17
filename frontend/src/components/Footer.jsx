@@ -4,95 +4,148 @@ function Footer() {
   // State to track which section is open
   const [openSection, setOpenSection] = useState(null);
 
-  
-
   // Function to handle link clicks
   const handleLinkClick = (section) => {
-    setOpenSection(openSection === section ? null : section); // Toggle open/close the section
+    setOpenSection(openSection === section ? null : section);
   };
 
   return (
-    <div>
-      <hr />
-      <footer className="footer footer-center text-base-content rounded p-10">
-        <nav className="grid grid-flow-col gap-4">
-          {/* 'About Us' link */}
-          <a onClick={() => handleLinkClick('about')} className="link link-hover cursor-pointer">
-            About us
-          </a>
-          {/* 'Contact' link */}
-          <a onClick={() => handleLinkClick('contact')} className="link link-hover cursor-pointer">
-            Contact
-          </a>
-        </nav>
-
-        {/* Conditional rendering for the 'About Us' content */}
-        {openSection === 'about' && (
-          <div className="mt-4">
-            <h2 className="text-lg font-semibold">About Us</h2>
-            <p>
-              We are a platform dedicated to project reviews, feedback, and collaboration. Our goal is to connect
-              professionals, students, and enthusiasts to share knowledge and improve their work through constructive feedback.
+    <footer className="bg-gradient-to-r from-blue-900 to-purple-900 text-white">
+      <div className="container mx-auto px-4 py-12">
+        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-8">
+          {/* Main Logo and Description */}
+          <div className="space-y-4">
+            <h2 className="text-2xl font-bold text-primary">PR Review Platform</h2>
+            <p className="text-gray-300">
+              Your ultimate hub for sharing, reviewing, and refining projects. Join our community to grow and innovate together.
             </p>
           </div>
-        )}
 
-        {/* Conditional rendering for the 'Contact' content */}
-        {openSection === 'contact' && (
-          <div className="mt-4">
-            <h2 className="text-lg font-semibold">Contact Us</h2>
-            <p>rajkadu2700@gmail.com</p>
-            <p>8261825587</p>
-            <p>prathameshpabe@gmail.com</p>
-            <p>9503583713</p>
-            <p>atharvb03@gmail.com</p>
-            <p>8446379837</p>
+          {/* Quick Links */}
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold mb-4">Quick Links</h3>
+            <nav className="space-y-2">
+              <a 
+                onClick={() => handleLinkClick('about')} 
+                className="link link-hover text-gray-300 hover:text-white transition-colors"
+              >
+                About Us
+              </a>
+              <a 
+                onClick={() => handleLinkClick('contact')} 
+                className="link link-hover text-gray-300 hover:text-white transition-colors"
+              >
+                Contact
+              </a>
+              <a 
+                onClick={() => handleLinkClick('help')} 
+                className="link link-hover text-gray-300 hover:text-white transition-colors"
+              >
+                Help Center
+              </a>
+              <a 
+                onClick={() => handleLinkClick('terms')} 
+                className="link link-hover text-gray-300 hover:text-white transition-colors"
+              >
+                Terms & Conditions
+              </a>
+            </nav>
           </div>
-        )}
 
-        {/* Social media links and copyright info */}
-        <nav>
-          <div className="grid grid-flow-col gap-4">
-            {/* Link to Twitter */}
-            <a href="https://twitter.com/yourprofile" target="_blank" rel="noopener noreferrer">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="24"
-                height="24"
-                viewBox="0 0 24 24"
-                className="fill-current">
-                <path d="M24 4.557c-.883.392-1.832.656-2.828.775 1.017-.609 1.798-1.574 2.165-2.724-.951.564-2.005.974-3.127 1.195-.897-.957-2.178-1.555-3.594-1.555-3.179 0-5.515 2.966-4.797 6.045-4.091-.205-7.719-2.165-10.148-5.144-1.29 2.213-.669 5.108 1.523 6.574-.806-.026-1.566-.247-2.229-.616-.054 2.281 1.581 4.415 3.949 4.89-.693.188-1.452.232-2.224.084.626 1.956 2.444 3.379 4.6 3.419-2.07 1.623-4.678 2.348-7.29 2.04 2.179 1.397 4.768 2.212 7.548 2.212 9.142 0 14.307-7.721 13.995-14.646.962-.695 1.797-1.562 2.457-2.549z"></path>
-              </svg>
-            </a>
-            {/* Link to YouTube */}
-            <a href="https://youtube.com/" target="_blank" rel="noopener noreferrer">
-               <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="24"
-                height="24"
-                viewBox="0 0 24 24"
-                className="fill-current">
-                <path d="M19.615 3.184c-3.604-.246-11.631-.245-15.23 0-3.897.266-4.356 2.62-4.385 8.816.029 6.185.484 8.549 4.385 8.816 3.6.245 11.626.246 15.23 0 3.897-.266 4.356-2.62 4.385-8.816-.029-6.185-.484-8.549-4.385-8.816zm-10.615 12.816v-8l8 3.993-8 4.007z"></path>
-              </svg>
-            </a>
-            {/* Link to Facebook */}
-            <a href="https://facebook.com/yourprofile" target="_blank" rel="noopener noreferrer">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="24"
-                height="24"
-                viewBox="0 0 24 24"
-                className="fill-current">
-                <path d="M9 8h-3v4h3v12h5v-12h3.642l.358-4h-4v-1.667c0-.955.192-1.333 1.115-1.333h2.885v-5h-3.808c-3.596 0-5.192 1.583-5.192 4.615v3.385z"></path>
-              </svg>
-            </a>
+          {/* Resources */}
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold mb-4">Resources</h3>
+            <nav className="space-y-2">
+              <a 
+                onClick={() => handleLinkClick('guides')} 
+                className="link link-hover text-gray-300 hover:text-white transition-colors"
+              >
+                Project Guides
+              </a>
+              <a 
+                onClick={() => handleLinkClick('templates')} 
+                className="link link-hover text-gray-300 hover:text-white transition-colors"
+              >
+                Project Templates
+              </a>
+              <a 
+                onClick={() => handleLinkClick('blog')} 
+                className="link link-hover text-gray-300 hover:text-white transition-colors"
+              >
+                Blog
+              </a>
+              <a 
+                onClick={() => handleLinkClick('faqs')} 
+                className="link link-hover text-gray-300 hover:text-white transition-colors"
+              >
+                FAQs
+              </a>
+            </nav>
           </div>
-        </nav>
-        <aside>
-          <p>Copyright © {new Date().getFullYear()} - All rights reserved</p>
-        </aside>
-      </footer>
-    </div>
+
+          {/* Social Links */}
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold mb-4">Connect With Us</h3>
+            <div className="flex space-x-4">
+              <a 
+                href="#" 
+                className="text-gray-300 hover:text-white transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                </svg>
+              </a>
+              <a 
+                href="#" 
+                className="text-gray-300 hover:text-white transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M23 3a10.9 10.9 0 01-3.14 1.53 4.48 4.48 0 00-7.86 3v1A10.66 10.66 0 013 4s-4 9 5 13a11.64 11.64 0 01-7 2c9 5 20 0 20-11.5a4.5 4.5 0 00-.08-.83A7.72 7.72 0 0023 3z" />
+                </svg>
+              </a>
+              <a 
+                href="#" 
+                className="text-gray-300 hover:text-white transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                </svg>
+              </a>
+              <a 
+                href="#" 
+                className="text-gray-300 hover:text-white transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 8h2a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2V6a2 2 0 012-2h2v4l.586-.586z" />
+                </svg>
+              </a>
+            </div>
+          </div>
+        </div>
+
+        {/* Bottom Bar */}
+        <div className="mt-12 pt-8 border-t border-gray-800">
+          <div className="flex flex-col md:flex-row justify-between items-center text-gray-400">
+            <p className="text-sm">© 2025 PR Review Platform. All rights reserved.</p>
+            <div className="flex space-x-4 mt-4 md:mt-0">
+              <a 
+                onClick={() => handleLinkClick('privacy')} 
+                className="text-sm hover:text-white transition-colors"
+              >
+                Privacy Policy
+              </a>
+              <a 
+                onClick={() => handleLinkClick('cookies')} 
+                className="text-sm hover:text-white transition-colors"
+              >
+                Cookie Policy
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </footer>
   );
 }
 
