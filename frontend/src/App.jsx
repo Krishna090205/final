@@ -8,7 +8,12 @@ import MenteeDashboard from './components/MenteeDashboard';
 import MentorDashboard from './components/MentorDashboard';
 import Navbar from './components/Navbar';
 import ProjectCoordinatorDashboard from './components/ProjectCoordinatorDashboard';
+import Projects from './components/Projects';
 import Signup from './components/Signup';
+import ReviewPage from './components/ReviewPage';
+import ProjectDetails from './components/ProjectDetails';
+import About from './components/About';
+import Contact from './components/Contact';
 
 function App() {
   return (
@@ -16,6 +21,11 @@ function App() {
       <Navbar />
       <Routes>
         <Route path="/" element={<><Banner /><Footer /></>} />
+        <Route path="/projects" element={<Projects />} />
+        <Route path="/projects/:id" element={<ProjectDetails />} />
+        <Route path="/projects/:id/review" element={<ReviewPage />} />
+        <Route path="/about" element={<About />} />
+        <Route path="/contact" element={<Contact />} />
         <Route path="/signup" element={<Signup />} />
         <Route path="/login" element={<Login />} />
         <Route path="/mentee-dashboard" element={<MenteeDashboard />} />

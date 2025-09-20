@@ -9,7 +9,8 @@ const { GridFsStorage } = require("multer-gridfs-storage");
 
 const app = express();
 const PORT = 5000;
-const mongoURI = "mongodb+srv://durgeshpadwal729:sXJlfq3tzkf6cboD@cluster0.xsaskto.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0z";
+// Prefer environment MONGO_URI if provided; fallback to existing URI
+const mongoURI = process.env.MONGO_URI || "mongodb+srv://durgeshpadwal729:sXJlfq3tzkf6cboD@cluster0.xsaskto.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0z";
 
 // Middleware
 app.use(bodyParser.json());
@@ -41,7 +42,9 @@ connectDB();
 
 // GridFS Storage
 const storage = new GridFsStorage({
-  url: mongoURI + "/project_management",
+  url: mongoURI,
+  // Explicit database name to avoid malformed URL when mongoURI contains query params
+  options: { useNewUrlParser: true, useUnifiedTopology: true },
   file: (req, file) =>
     new Promise((resolve, reject) => {
       crypto.randomBytes(16, (err, buf) => {
@@ -57,6 +60,7 @@ const storage = new GridFsStorage({
         });
       });
     }),
+  database: 'project_management',
 });
 const upload = multer({ storage });
 
@@ -152,13 +156,99 @@ app.post("/api/add-project", async (req, res) => {
   }
 });
 
+// Create a rich project document
+app.post("/api/projects", async (req, res) => {
+  try {
+    const {
+      title,
+      domain,
+      description = "",
+      deadline, // ISO string or date
+      teamMembers = [], // [{ name, role }]
+      mentorName = "",
+      mentorEmail = "",
+    } = req.body;
+
+    if (!title) {
+      return res.status(400).json({ success: false, message: "Project title is required" });
+    }
+
+    // Basic validation on teamMembers
+    const normalizedTeam = Array.isArray(teamMembers)
+      ? teamMembers
+          .filter(tm => tm && (tm.name || tm.role))
+          .map(tm => ({ name: tm.name || "", role: tm.role || "" }))
+      : [];
+
+    const now = new Date();
+    const doc = {
+      title,
+      domain,
+      description,
+      deadline: deadline ? new Date(deadline) : null,
+      teamMembers: normalizedTeam,
+      mentorName,
+      mentorEmail,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    if (!projectsCollection) {
+      console.error("projectsCollection is not initialized yet");
+      return res.status(503).json({ success: false, message: "Database not ready" });
+    }
+    const result = await projectsCollection.insertOne(doc);
+    return res.status(201).json({ success: true, message: "Project created", projectId: result.insertedId });
+  } catch (err) {
+    console.error("Error creating project:", err?.message || err, err?.stack);
+    return res.status(500).json({ success: false, message: "Server error while creating project" });
+  }
+});
+
 // Get all projects
 app.get("/api/projects", async (req, res) => {
   try {
+    if (!projectsCollection) {
+      console.error("projectsCollection is not initialized yet");
+      return res.status(503).json({ success: false, message: "Database not ready" });
+    }
     const projects = await projectsCollection.find({}).toArray();
     res.json({ success: true, data: projects });
   } catch (err) {
+    console.error("Error fetching projects:", err?.message || err, err?.stack);
     res.status(500).json({ success: false, message: "Failed to fetch projects" });
+  }
+});
+
+// Get single project by id (compatibility with frontend details page)
+app.get("/api/projects/:id", async (req, res) => {
+  try {
+    if (!projectsCollection) {
+      return res.status(503).json({ success: false, message: "Database not ready" });
+    }
+    const { id } = req.params;
+    const proj = await projectsCollection.findOne({ _id: new ObjectId(id) });
+    if (!proj) return res.status(404).json({ success: false, message: "Project not found" });
+    return res.json({ success: true, data: proj });
+  } catch (err) {
+    console.error("Error fetching project by id:", err?.message || err, err?.stack);
+    return res.status(500).json({ success: false, message: "Failed to fetch project" });
+  }
+});
+
+// Explicit "/detail" endpoint
+app.get("/api/projects/:id/detail", async (req, res) => {
+  try {
+    if (!projectsCollection) {
+      return res.status(503).json({ success: false, message: "Database not ready" });
+    }
+    const { id } = req.params;
+    const proj = await projectsCollection.findOne({ _id: new ObjectId(id) });
+    if (!proj) return res.status(404).json({ success: false, message: "Project not found" });
+    return res.json({ success: true, data: proj });
+  } catch (err) {
+    console.error("Error fetching project detail:", err?.message || err, err?.stack);
+    return res.status(500).json({ success: false, message: "Failed to fetch project" });
   }
 });
 

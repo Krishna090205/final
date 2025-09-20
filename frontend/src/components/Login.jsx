@@ -14,9 +14,16 @@ function Login() {
 
     try {
       const response = await axios.post('http://localhost:5000/api/login', { email, password });
-      const { success, role, mentorId } = response.data;
+      const { success, role, mentorId, userId } = response.data;
 
       if (success) {
+        // Persist role so Navbar can show Dashboard link
+        if (role) {
+          localStorage.setItem('role', role);
+        }
+        if (userId) {
+          localStorage.setItem('userId', userId);
+        }
         if (role === 'mentor') {
           localStorage.setItem('mentorId', mentorId); // Save mentorId to localStorage
           navigate('/mentor-dashboard');
