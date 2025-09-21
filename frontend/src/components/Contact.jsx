@@ -30,7 +30,11 @@ const Contact = () => {
     if (!validate()) return;
     setSubmitting(true);
     try {
-      await axios.post('http://localhost:5000/api/contacts', { name, email, message });
+      try {
+        await axios.post('http://localhost:5000/api/contacts', { name, email, message });
+      } catch (_) {
+        await axios.post('/api/contacts', { name, email, message });
+      }
       setName(''); setEmail(''); setMessage('');
       showToast('success', 'Message sent');
       setErrors({});

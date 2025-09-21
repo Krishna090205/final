@@ -55,11 +55,18 @@ const ReviewPage = () => {
   const fetchAll = async () => {
     try {
       setLoading(true);
-      const [pRes, rRes] = await Promise.all([
-        axios.get(`http://localhost:5000/api/projects/${id}/detail`),
-        axios.get(`http://localhost:5000/api/projects/${id}/reviews`),
-      ]);
-      setProject(pRes.data?.data);
+      let pRes, rRes;
+      try {
+        pRes = await axios.get(`http://localhost:5000/api/projects/${id}/detail`);
+      } catch (_) {
+        pRes = await axios.get(`/api/projects/${id}/detail`);
+      }
+      try {
+        rRes = await axios.get(`http://localhost:5000/api/projects/${id}/reviews`);
+      } catch (_) {
+        rRes = await axios.get(`/api/projects/${id}/reviews`);
+      }
+      setProject(pRes.data?.data || null);
       setReviews(rRes.data?.data || []);
       setErr('');
     } catch (e) {
@@ -82,7 +89,11 @@ const ReviewPage = () => {
     }
     setSubmitting(true);
     try {
-      await axios.post(`http://localhost:5000/api/projects/${id}/reviews`, { rating, comment });
+      try {
+        await axios.post(`http://localhost:5000/api/projects/${id}/reviews`, { rating, comment });
+      } catch (_) {
+        await axios.post(`/api/projects/${id}/reviews`, { rating, comment });
+      }
       setRating(0);
       setComment('');
       showToast('success', 'Review submitted');

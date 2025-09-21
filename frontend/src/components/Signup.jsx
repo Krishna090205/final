@@ -26,11 +26,12 @@ function Signup() {
     }
 
     try {
-      const response = await axios.post('http://localhost:5000/api/signup', {
-        email,
-        password,
-        role
-      });
+      let response;
+      try {
+        response = await axios.post('http://localhost:5000/api/auth/signup', { email, password, role });
+      } catch (_) {
+        response = await axios.post('/api/auth/signup', { email, password, role });
+      }
 
       setServerMessage(response.data.message);
       setEmail('');
@@ -126,7 +127,7 @@ function Signup() {
 
           <p className="text-sm text-center">
             Already have an account?{' '}
-            <Link to="/" className="text-blue-500 underline">
+            <Link to="/login" className="text-blue-500 underline">
               Login
             </Link>
           </p>

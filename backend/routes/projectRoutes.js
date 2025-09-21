@@ -1,20 +1,107 @@
 const express = require("express");
 const Project = require("../models/project");
+const User = require("../models/user");
 const Review = require("../models/review");
 const Contact = require("../models/contact");
+const auth = require('../middleware/auth');
 
 const router = express.Router();
 
 // Add Project
-router.post("/add-project", async (req, res) => {
-  const { projectName, menteeEmail } = req.body;
+router.post("/projects", auth, async (req, res) => {
+  const { 
+    title, 
+    description, 
+    domain, 
+    deadline, 
+    teamMembers, 
+    mentorEmail 
+  } = req.body;
 
   try {
-    const newProject = new Project({ projectName, menteeEmail });
+    // Validate required fields
+    if (!title || !description || !domain || !deadline || !mentorEmail) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Missing required fields' 
+      });
+    }
+
+    // Validate team members
+    if (!Array.isArray(teamMembers) || teamMembers.length === 0) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'At least one team member is required' 
+      });
+    }
+
+    // Validate mentor exists and has the correct role
+    const mentor = await User.findOne({ 
+      email: mentorEmail.toLowerCase(),
+      role: 'mentor' 
+    });
+
+    if (!mentor) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Mentor not found or invalid mentor email' 
+      });
+    }
+
+    // Create new project
+    const newProject = new Project({
+      title,
+      description,
+      domain,
+      deadline: new Date(deadline),
+      teamMembers,
+      mentorEmail: mentor.email.toLowerCase(),
+      mentorId: mentor._id,
+      createdBy: req.user._id,
+      // For backward compatibility
+      projectName: title,
+      menteeEmail: req.user.email
+    });
+
     await newProject.save();
-    res.json({ success: true, message: "Project added successfully", project: newProject });
-  } catch (err) {
-    res.status(500).json({ message: "Failed to add project" });
+
+    // Populate the response with user data
+    const populatedProject = await Project.findById(newProject._id)
+      .populate('mentorId', 'name email')
+      .populate('createdBy', 'name email');
+
+    res.status(201).json({ 
+      success: true, 
+      message: 'Project created successfully', 
+      data: populatedProject 
+    });
+
+  } catch (error) {
+    console.error('Error creating project:', error);
+    
+    // Handle validation errors
+    if (error.name === 'ValidationError') {
+      const messages = Object.values(error.errors).map(val => val.message);
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Validation error',
+        errors: messages 
+      });
+    }
+
+    // Handle duplicate key errors
+    if (error.code === 11000) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'A project with this title already exists' 
+      });
+    }
+
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to create project',
+      error: error.message 
+    });
   }
 });
 

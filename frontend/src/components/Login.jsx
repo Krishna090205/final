@@ -13,7 +13,12 @@ function Login() {
     e.preventDefault();
 
     try {
-      const response = await axios.post('http://localhost:5000/api/login', { email, password });
+      let response;
+      try {
+        response = await axios.post('http://localhost:5000/api/auth/login', { email, password });
+      } catch (_) {
+        response = await axios.post('/api/auth/login', { email, password });
+      }
       const { success, role, mentorId, userId } = response.data;
 
       if (success) {
