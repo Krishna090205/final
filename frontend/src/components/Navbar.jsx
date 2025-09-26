@@ -17,14 +17,71 @@ const Navbar = () => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // .3 - Navbar links
-  const navLinks = [
+  // .3 - Base Navbar links
+  const baseLinks = [
     { path: '/', label: 'Home' },
     { path: '/projects', label: 'Projects' },
-    { path: '/reviews', label: 'Reviews' },
     { path: '/about', label: 'About' },
     { path: '/contact', label: 'Contact' }
   ];
+
+  // .3.1 - Determine role and dashboard link
+  const [role, setRole] = useState(null);
+  useEffect(() => {
+    const r = localStorage.getItem('role');
+    setRole(r);
+    const onStorage = (e) => {
+      if (e.key === 'role') setRole(e.newValue);
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
+
+  // Re-check role on route change so same-tab login/logout updates immediately
+  useEffect(() => {
+    const r = localStorage.getItem('role');
+    setRole(r);
+  }, [location.pathname]);
+
+  const roleToDashboard = (r) => {
+    switch (r) {
+      case 'mentee':
+        return { path: '/mentee-dashboard', label: 'Mentee Dashboard' };
+      case 'mentor':
+        return { path: '/mentor-dashboard', label: 'Mentor Dashboard' };
+      case 'hod':
+        return { path: '/hod-dashboard', label: 'HOD Dashboard' };
+      case 'project_coordinator':
+      case 'coordinator':
+        return { path: '/project-coordinator-dashboard', label: 'Coordinator Dashboard' };
+      default:
+        return null;
+    }
+  };
+
+  // .3.2 - Build final nav links (insert Dashboard after Home when logged-in)
+  const navLinks = (() => {
+    const links = [...baseLinks];
+    const dash = roleToDashboard(role);
+    if (dash) {
+      // Insert after Home (index 1)
+      links.splice(1, 0, { path: dash.path, label: 'Dashboard' });
+    }
+    return links;
+  })();
+
+  // .3.3 - Logout handler
+  const handleLogout = () => {
+    try {
+      localStorage.removeItem('role');
+      localStorage.removeItem('userId');
+      localStorage.removeItem('mentorId');
+      setRole(null);
+      navigate('/login');
+    } catch (_) {
+      // noop
+    }
+  };
 
   // .4 - Return UI
   return (
@@ -71,12 +128,24 @@ const Navbar = () => {
                 </svg>
               </button>
 
+              {/* Always show Login button as requested */}
               <a
                 className="bg-black text-white p-2.5 rounded-md hover:bg-slate-800 duration-300 cursor-pointer"
                 onClick={() => navigate('/login')}
               >
                 Login
               </a>
+
+              {/* Show Logout when logged-in */}
+              {role && (
+                <button
+                  onClick={handleLogout}
+                  className="p-2.5 rounded-md border hover:bg-gray-50 duration-300"
+                  title="Logout"
+                >
+                  Logout
+                </button>
+              )}
             </div>
           </div>
         </div>
