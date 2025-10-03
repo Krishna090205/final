@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 
 function Signup() {
+  const [name, setName] = useState(''); // Added name state
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState('mentor');
@@ -19,7 +20,7 @@ function Signup() {
       return;
     }
 
-    // Validate password
+    // Validate password (still keep for frontend validation, but won't send to backend)
     if (password.length < 6) {
       setPasswordError('Password should be at least 6 characters long.');
       return;
@@ -27,13 +28,16 @@ function Signup() {
 
     try {
       let response;
+      const payload = { name, email, role }; // Modified payload: added name, removed password
+
       try {
-        response = await axios.post('http://localhost:5000/api/auth/signup', { email, password, role });
+        response = await axios.post('http://localhost:5000/api/signup', payload); // Corrected endpoint
       } catch (_) {
-        response = await axios.post('/api/auth/signup', { email, password, role });
+        response = await axios.post('/api/signup', payload); // Corrected endpoint
       }
 
       setServerMessage(response.data.message);
+      setName(''); // Clear name
       setEmail('');
       setPassword('');
       setRole('mentor');
@@ -58,6 +62,20 @@ function Signup() {
 
         <form onSubmit={handleSubmit}>
           <div className="mb-4">
+            <label htmlFor="name" className="block text-sm font-medium">
+              Name
+            </label>
+            <input
+              id="name"
+              type="text"
+              placeholder="Enter your Name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full px-3 py-2 border rounded-md outline-none"
+            />
+          </div>
+
+          <div className="mb-4">
             <label htmlFor="email" className="block text-sm font-medium">
               Email
             </label>
@@ -77,7 +95,7 @@ function Signup() {
 
           <div className="mb-4">
             <label htmlFor="password" className="block text-sm font-medium">
-              Password
+              Password (Not stored in database for this setup)
             </label>
             <input
               id="password"
@@ -93,6 +111,10 @@ function Signup() {
             {passwordError && (
               <p className="text-red-500 text-sm">{passwordError}</p>
             )}
+            <p className="text-sm text-yellow-600">
+              Warning: Password is not stored in the database with the current schema.
+              Consider using Supabase Authentication for secure password handling.
+            </p>
           </div>
 
           <div className="mb-4">
