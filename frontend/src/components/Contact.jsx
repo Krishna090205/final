@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
-import axios from 'axios';
+import React, { useState, useEffect } from 'react';
+import { supabase } from '../lib/supabase';
 import { motion, AnimatePresence } from 'framer-motion';
+import axios from 'axios';
 
 const Contact = () => {
   const [name, setName] = useState('');
@@ -9,6 +10,71 @@ const Contact = () => {
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState(null);
   const [errors, setErrors] = useState({});
+
+  // Admin functionality
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [contacts, setContacts] = useState([]);
+  const [loadingContacts, setLoadingContacts] = useState(false);
+
+  useEffect(() => {
+    checkAdminAccess();
+    // Test API connection instead of direct Supabase
+    const testAPIConnection = async () => {
+      try {
+        console.log('Testing API connection...');
+        const response = await axios.get('http://localhost:5000/api/admin/contacts');
+        if (response.data.success) {
+          console.log('API connection successful');
+        } else {
+          console.error('API connection failed:', response.data.message);
+        }
+      } catch (error) {
+        console.error('API connection error:', error.message);
+      }
+    };
+    testAPIConnection();
+  }, []);
+
+  const checkAdminAccess = async () => {
+    try {
+      const currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}');
+      if (currentUser.role === 'hod' && currentUser.userId) {
+        setIsAdmin(true);
+        loadContacts(currentUser.userId);
+      }
+    } catch (error) {
+      console.error('Error checking admin access:', error);
+    }
+  };
+
+  const loadContacts = async (userId) => {
+    setLoadingContacts(true);
+    try {
+      console.log('Loading contacts for admin via API...');
+      const response = await axios.get('http://localhost:5000/api/admin/contacts');
+
+      if (response.data.success) {
+        console.log('Contacts loaded successfully via API:', response.data.data?.length || 0);
+        setContacts(response.data.data || []);
+      } else {
+        console.error('API returned error for contacts:', response.data);
+        showToast('error', response.data.message || 'Failed to load contacts');
+        setContacts([]);
+      }
+    } catch (error) {
+      console.error('Error loading contacts via API:', error);
+      if (error.response) {
+        showToast('error', error.response.data.message || 'Failed to load contacts');
+      } else if (error.request) {
+        showToast('error', 'Network error - please check if the server is running');
+      } else {
+        showToast('error', 'Failed to load contacts');
+      }
+      setContacts([]);
+    } finally {
+      setLoadingContacts(false);
+    }
+  };
 
   const showToast = (type, text) => {
     setToast({ type, text });
@@ -30,16 +96,34 @@ const Contact = () => {
     if (!validate()) return;
     setSubmitting(true);
     try {
-      try {
-        await axios.post('http://localhost:5000/api/contacts', { name, email, message });
-      } catch (_) {
-        await axios.post('/api/contacts', { name, email, message });
+      console.log('Submitting contact form via API:', { name, email, message });
+      const response = await axios.post('http://localhost:5000/api/contact', {
+        name: name.trim(),
+        email: email.trim().toLowerCase(),
+        message: message.trim()
+      });
+
+      if (response.data.success) {
+        console.log('Contact form submitted successfully via API:', response.data);
+        setName(''); setEmail(''); setMessage('');
+        showToast('success', 'Message sent successfully! We will get back to you soon.');
+        setErrors({});
+      } else {
+        console.error('API returned error:', response.data);
+        showToast('error', response.data.message || 'Failed to send message');
       }
-      setName(''); setEmail(''); setMessage('');
-      showToast('success', 'Message sent');
-      setErrors({});
-    } catch (e) {
-      showToast('error', 'Failed to send message');
+    } catch (error) {
+      console.error('Error submitting contact form via API:', error);
+      if (error.response) {
+        // Server responded with error status
+        showToast('error', error.response.data.message || 'Failed to send message');
+      } else if (error.request) {
+        // Network error
+        showToast('error', 'Network error - please check if the server is running');
+      } else {
+        // Other error
+        showToast('error', 'Failed to send message');
+      }
     } finally {
       setSubmitting(false);
     }
@@ -66,7 +150,7 @@ const Contact = () => {
           <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}
             className="rounded-2xl bg-gradient-to-br from-indigo-600 via-indigo-500 to-indigo-400 p-8 text-white shadow-xl">
             <h1 className="text-3xl font-bold">Get in touch</h1>
-            <p className="mt-2 text-indigo-100">Have questions or feedback? Send us a message and we’ll get back to you shortly.</p>
+            <p className="mt-2 text-indigo-100">Have questions or feedback? Send us a message and we'll get back to you shortly.</p>
 
             <div className="mt-8 space-y-4">
               <div className="flex items-center gap-3">
@@ -132,6 +216,38 @@ const Contact = () => {
             </form>
           </motion.div>
         </div>
+
+        {/* Admin Section */}
+        {isAdmin && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, delay: 0.1 }}
+            className="mt-8 bg-white rounded-2xl shadow-xl p-6 border"
+          >
+            <h3 className="text-xl font-semibold text-gray-900 mb-4">Contact Submissions (Admin)</h3>
+            {loadingContacts ? (
+              <p className="text-gray-600">Loading contacts...</p>
+            ) : contacts.length === 0 ? (
+              <p className="text-gray-600">No contact submissions yet.</p>
+            ) : (
+              <div className="space-y-4">
+                {contacts.map((contact, index) => (
+                  <div key={index} className="border rounded-lg p-4 bg-gray-50">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <p className="font-medium text-gray-900">{contact.name}</p>
+                        <p className="text-sm text-gray-600">{contact.email}</p>
+                      </div>
+                      <p className="text-xs text-gray-500">{new Date(contact.created_at).toLocaleString()}</p>
+                    </div>
+                    <p className="mt-2 text-gray-800">{contact.message}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </motion.div>
+        )}
       </div>
     </div>
   );

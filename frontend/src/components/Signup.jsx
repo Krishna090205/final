@@ -1,6 +1,6 @@
-import axios from 'axios';
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { supabase } from '../lib/supabase';
 
 function Signup() {
   const [name, setName] = useState(''); // Added name state
@@ -27,26 +27,53 @@ function Signup() {
     }
 
     try {
-      let response;
-      const payload = { name, email, role }; // Modified payload: added name, removed password
+      const normalizedEmail = email.toLowerCase();
 
-      try {
-        response = await axios.post('http://localhost:5000/api/signup', payload); // Corrected endpoint
-      } catch (_) {
-        response = await axios.post('/api/signup', payload); // Corrected endpoint
+      // Check if user already exists
+      const { data: existingUser, error: existingUserError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('email', normalizedEmail)
+        .single();
+
+      if (existingUserError && existingUserError.code !== 'PGRST116') {
+        console.error('Supabase existing user check error:', existingUserError);
+        setServerMessage('Internal server error. Please try again.');
+        return;
       }
 
-      setServerMessage(response.data.message);
-      setName(''); // Clear name
+      if (existingUser) {
+        setServerMessage('User already exists. Please try logging in instead.');
+        return;
+      }
+
+      // Create new user in Supabase
+      const { data: newUser, error: insertError } = await supabase
+        .from('users')
+        .insert([{
+          name,
+          email: normalizedEmail,
+          role,
+          isVerified: false,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }]);
+
+      if (insertError) {
+        console.error('Supabase signup error:', insertError);
+        setServerMessage('Internal server error. Please try again.');
+        return;
+      }
+
+      setServerMessage('User registered successfully!');
+      setName('');
       setEmail('');
       setPassword('');
       setRole('mentor');
+
     } catch (error) {
-      if (error.response && error.response.data.message) {
-        setServerMessage(error.response.data.message);
-      } else {
-        setServerMessage('Error: Unable to register user');
-      }
+      console.error('Signup error:', error);
+      setServerMessage('Error: Unable to register user');
     }
   };
 

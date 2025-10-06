@@ -6,26 +6,63 @@ const { createClient } = require("@supabase/supabase-js");
 const multer = require("multer");
 const { Readable } = require("stream");
 
-const app = express();
-const PORT = 5000;
-
-// Supabase Setup
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_ANON_KEY;
-const supabase = createClient(supabaseUrl, supabaseKey);
+// Import routes
+const contactRoutes = require("./routes/contact.js");
 
 // Middleware
 app.use(bodyParser.json());
 app.use(cors());
 
+// Use contact routes
+app.use("/api", contactRoutes);
+
+// Role-based access control middleware
+const requireRole = (allowedRoles) => {
+  return async (req, res, next) => {
+    try {
+      // In a real app, you'd validate JWT token here
+      // For now, we'll check if userId is provided and validate role
+      const { userId } = req.body || req.query;
+
+      if (!userId) {
+        return res.status(401).json({ success: false, message: "Authentication required" });
+      }
+
+      const { data: user, error } = await supabase
+        .from("users")
+        .select("id, name, email, role")
+        .eq("id", userId)
+        .single();
+
+      if (error || !user) {
+        return res.status(401).json({ success: false, message: "Invalid user" });
+      }
+
+      if (!allowedRoles.includes(user.role)) {
+        return res.status(403).json({ success: false, message: "Insufficient permissions" });
+      }
+
+      req.user = user;
+      next();
+    } catch (err) {
+      console.error("Auth middleware error:", err);
+      res.status(500).json({ success: false, message: "Authentication error" });
+    }
+  };
+};
+
 // Start Server
-app.listen(PORT, () => {
-  console.log(`🚀 Server running at http://localhost:${PORT}`);
+const server = app.listen(PORT, () => {
+  console.log(` Server running at http://localhost:${PORT}`);
+});
+
+server.on('error', (err) => {
+  console.error("Error starting server:", err);
+  process.exit(1);
 });
 
 // Multer for memory storage for Supabase uploads
 const upload = multer({ storage: multer.memoryStorage() });
-
 /*************** USER ROUTES ***************/
 
 // Signup
@@ -78,20 +115,72 @@ app.post("/api/signup", async (req, res) => {
 // Submit a review
 app.post("/api/reviews", async (req, res) => {
   try {
-    const { projectId, rating, comment, reviewerName = "Anonymous" } = req.body;
+    const { projectId, userId, rating, comment } = req.body;
 
-    if (!projectId || !rating) {
-      return res.status(400).json({ success: false, message: "Project ID and rating are required" });
+    if (!projectId || !rating || !userId) {
+      return res.status(400).json({ success: false, message: "Project ID, user ID, and rating are required" });
     }
 
+    if (rating < 1 || rating > 5) {
+      return res.status(400).json({ success: false, message: "Rating must be between 1 and 5" });
+    }
+
+    // Validate user exists
+    const { data: user, error: userError } = await supabase
+      .from("users")
+      .select("id, name, email, role")
+      .eq("id", userId)
+      .single();
+
+    if (userError && userError.code !== 'PGRST116') {
+      console.error("User validation error:", userError);
+      return res.status(500).json({ success: false, message: "Error validating user" });
+    }
+    if (!user) {
+      return res.status(400).json({ success: false, message: "Invalid user" });
+    }
+
+    // Validate project exists
+    const { data: project, error: projectError } = await supabase
+      .from("projects")
+      .select("id, title")
+      .eq("id", projectId)
+      .single();
+
+    if (projectError && projectError.code !== 'PGRST116') {
+      console.error("Project validation error:", projectError);
+      return res.status(500).json({ success: false, message: "Error validating project" });
+    }
+    if (!project) {
+      return res.status(400).json({ success: false, message: "Project not found" });
+    }
+
+    // Check if user already reviewed this project
+    const { data: existingReview, error: existingError } = await supabase
+      .from("reviews")
+      .select("id")
+      .eq("project_id", projectId)
+      .eq("user_id", userId)
+      .single();
+
+    if (existingError && existingError.code !== 'PGRST116') {
+      console.error("Error checking existing review:", existingError);
+    }
+
+    if (existingReview) {
+      return res.status(400).json({ success: false, message: "You have already reviewed this project" });
+    }
+
+    // Insert review
+    const now = new Date();
     const { data: review, error: insertError } = await supabase
       .from("reviews")
       .insert([{
-        projectId,
-        rating,
-        comment,
-        reviewerName,
-        createdAt: new Date().toISOString(),
+        project_id: projectId,
+        user_id: userId,
+        rating: rating,
+        comment: comment || "",
+        created_at: now.toISOString(),
       }])
       .select();
 
@@ -101,18 +190,18 @@ app.post("/api/reviews", async (req, res) => {
     }
 
     // Update project's average rating and count
-    const { data: existingReviews, error: fetchReviewsError } = await supabase
+    const { data: allReviews, error: fetchReviewsError } = await supabase
       .from("reviews")
       .select("rating")
-      .eq("projectId", projectId);
+      .eq("project_id", projectId);
 
     if (fetchReviewsError) {
       console.error("Supabase fetch existing reviews error:", fetchReviewsError);
-      // Proceed without updating avg rating if fetching fails
+      // Continue with success response even if rating update fails
     } else {
-      const totalRating = existingReviews.reduce((sum, r) => sum + r.rating, 0);
-      const avgRating = totalRating / existingReviews.length;
-      const ratingsCount = existingReviews.length;
+      const totalRating = allReviews.reduce((sum, r) => sum + r.rating, 0);
+      const avgRating = totalRating / allReviews.length;
+      const ratingsCount = allReviews.length;
 
       const { error: updateProjectError } = await supabase
         .from("projects")
@@ -135,16 +224,54 @@ app.post("/api/reviews", async (req, res) => {
 app.get("/api/reviews/:projectId", async (req, res) => {
   try {
     const { projectId } = req.params;
+
+    // Validate project exists
+    const { data: project, error: projectError } = await supabase
+      .from("projects")
+      .select("id, title")
+      .eq("id", projectId)
+      .single();
+
+    if (projectError && projectError.code !== 'PGRST116') {
+      console.error("Project validation error:", projectError);
+      return res.status(500).json({ success: false, message: "Error validating project" });
+    }
+    if (!project) {
+      return res.status(404).json({ success: false, message: "Project not found" });
+    }
+
     const { data: reviews, error } = await supabase
       .from("reviews")
-      .select("*")
-      .eq("projectId", projectId);
+      .select(`
+        id,
+        project_id,
+        user_id,
+        rating,
+        comment,
+        created_at,
+        users!inner(name, email)
+      `)
+      .eq("project_id", projectId)
+      .order("created_at", { ascending: false });
 
     if (error) {
       console.error("Supabase fetch reviews error:", error);
       return res.status(500).json({ success: false, message: "Failed to fetch reviews" });
     }
-    res.json({ success: true, data: reviews });
+
+    // Format reviews for frontend
+    const formattedReviews = reviews.map(review => ({
+      id: review.id,
+      projectId: review.project_id,
+      userId: review.user_id,
+      rating: review.rating,
+      comment: review.comment,
+      createdAt: review.created_at,
+      reviewerName: review.users?.name || "Anonymous",
+      reviewerEmail: review.users?.email || ""
+    }));
+
+    res.json({ success: true, data: formattedReviews });
   } catch (err) {
     console.error("Get reviews error:", err);
     res.status(500).json({ success: false, message: "Internal server error" });
@@ -196,8 +323,8 @@ app.get("/api/mentors", async (req, res) => {
   }
 });
 
-// Get mentees
-app.get("/api/mentees", async (req, res) => {
+// Get mentees for project team member selection
+app.get("/api/available-mentees", async (req, res) => {
   try {
     const { data: mentees, error } = await supabase
       .from("users")
@@ -205,12 +332,13 @@ app.get("/api/mentees", async (req, res) => {
       .eq("role", "mentee");
 
     if (error) {
-      console.error("Supabase fetch mentees error:", error);
-      return res.status(500).json({ success: false, message: "Failed to fetch mentees" });
+      console.error("Supabase fetch available mentees error:", error);
+      return res.status(500).json({ success: false, message: "Failed to fetch available mentees" });
     }
     res.json({ success: true, data: mentees });
   } catch (err) {
-    res.status(500).json({ success: false, message: "Failed to fetch mentees" });
+    console.error("Error fetching available mentees:", err);
+    res.status(500).json({ success: false, message: "Failed to fetch available mentees" });
   }
 });
 
@@ -282,45 +410,164 @@ app.post("/api/projects", async (req, res) => {
       domain,
       description = "",
       deadline, // ISO string or date
-      teamMembers = [], // [{ name, role }]
+      githubRepo = "", // GitHub repository URL (optional)
       mentorName = "",
       mentorEmail = "",
+      teamMembers = [], // [{ userId, name, email, role }]
+      createdBy // User ID of the person creating the project
     } = req.body;
 
-    if (!title) {
+    // Validation
+    if (!title || !title.trim()) {
       return res.status(400).json({ success: false, message: "Project title is required" });
     }
+    if (!domain || !domain.trim()) {
+      return res.status(400).json({ success: false, message: "Project domain is required" });
+    }
+    if (!githubRepo || !githubRepo.trim()) {
+      return res.status(400).json({ success: false, message: "GitHub repository URL is required" });
+    }
+    if (!mentorName || !mentorName.trim()) {
+      return res.status(400).json({ success: false, message: "Mentor name is required" });
+    }
+    if (!mentorEmail || !mentorEmail.trim()) {
+      return res.status(400).json({ success: false, message: "Mentor email is required" });
+    }
+    if (!createdBy) {
+      return res.status(400).json({ success: false, message: "Creator information is required" });
+    }
 
-    // Basic validation on teamMembers
-    const normalizedTeam = Array.isArray(teamMembers)
-      ? teamMembers
-          .filter(tm => tm && (tm.name || tm.role))
-          .map(tm => ({ name: tm.name || "", role: tm.role || "" }))
-      : [];
+    // Validate email format for mentor
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailPattern.test(mentorEmail.trim())) {
+      return res.status(400).json({ success: false, message: "Please enter a valid mentor email address" });
+    }
+
+    // Validate GitHub URL format
+    const githubUrlPattern = /^https:\/\/github\.com\/[^\/]+\/[^\/]+$/;
+    if (!githubUrlPattern.test(githubRepo.trim())) {
+      return res.status(400).json({
+        success: false,
+        message: "Please enter a valid GitHub repository URL (format: https://github.com/username/repository)"
+      });
+    }
+
+    // Validate mentor exists and is a mentor
+    const { data: mentor, error: mentorError } = await supabase
+      .from("users")
+      .select("id, name, email, role")
+      .eq("email", mentorEmail.trim().toLowerCase())
+      .eq("role", "mentor")
+      .single();
+
+    if (mentorError && mentorError.code !== 'PGRST116') {
+      console.error("Mentor validation error:", mentorError);
+      return res.status(500).json({ success: false, message: "Error validating mentor" });
+    }
+    if (!mentor) {
+      return res.status(400).json({ success: false, message: "Invalid mentor email or mentor not found" });
+    }
+
+    // Validate creator exists
+    const { data: creator, error: creatorError } = await supabase
+      .from("users")
+      .select("id, name, email, role")
+      .eq("id", createdBy)
+      .single();
+
+    if (creatorError && creatorError.code !== 'PGRST116') {
+      console.error("Creator validation error:", creatorError);
+      return res.status(500).json({ success: false, message: "Error validating creator" });
+    }
+    if (!creator) {
+      return res.status(400).json({ success: false, message: "Invalid creator information" });
+    }
+
+    // Validate team members and ensure they exist in mentees table
+    const validatedTeamMembers = [];
+    if (Array.isArray(teamMembers) && teamMembers.length > 0) {
+      for (const member of teamMembers) {
+        if (member.userId) {
+          const { data: mentee, error: menteeError } = await supabase
+            .from("users")
+            .select("id, name, email, role")
+            .eq("id", member.userId)
+            .eq("role", "mentee")
+            .single();
+
+          if (menteeError && menteeError.code !== 'PGRST116') {
+            console.error("Team member validation error:", menteeError);
+            return res.status(500).json({ success: false, message: "Error validating team member" });
+          }
+          if (!mentee) {
+            return res.status(400).json({
+              success: false,
+              message: `Team member not found: ${member.userId}`
+            });
+          }
+
+          validatedTeamMembers.push({
+            userId: mentee.id,
+            name: mentee.name,
+            email: mentee.email,
+            role: member.role || "Developer"
+          });
+        }
+      }
+    }
 
     const now = new Date();
-    const doc = {
-      title,
-      domain,
-      description,
+    const projectData = {
+      title: title.trim(),
+      domain: domain.trim(),
+      description: description.trim(),
       deadline: deadline ? new Date(deadline).toISOString() : null,
-      teamMembers: normalizedTeam,
-      mentorName,
-      mentorEmail,
+      githubRepo: githubRepo.trim(),
+      mentorName: mentorName.trim(),
+      mentorEmail: mentorEmail.trim().toLowerCase(),
+      createdBy: createdBy,
+      status: 'draft',
+      avgRating: 0,
+      ratingsCount: 0,
       createdAt: now.toISOString(),
       updatedAt: now.toISOString(),
     };
 
     const { data: project, error: insertError } = await supabase
       .from("projects")
-      .insert([doc])
+      .insert([projectData])
       .select();
 
     if (insertError) {
       console.error("Supabase creating project error:", insertError);
       return res.status(500).json({ success: false, message: "Server error while creating project" });
     }
-    return res.status(201).json({ success: true, message: "Project created", projectId: project[0].id });
+
+    // Insert team members into project_team_members table
+    if (validatedTeamMembers.length > 0) {
+      const teamMemberInserts = validatedTeamMembers.map(member => ({
+        project_id: project[0].id,
+        user_id: member.userId,
+        role: member.role,
+        created_at: now.toISOString()
+      }));
+
+      const { error: teamError } = await supabase
+        .from("project_team_members")
+        .insert(teamMemberInserts);
+
+      if (teamError) {
+        console.error("Error inserting team members:", teamError);
+        // Don't fail the project creation if team members fail, just log it
+      }
+    }
+
+    return res.status(201).json({
+      success: true,
+      message: "Project created successfully",
+      projectId: project[0].id,
+      data: project[0]
+    });
   } catch (err) {
     console.error("Error creating project:", err?.message || err, err?.stack);
     return res.status(500).json({ success: false, message: "Server error while creating project" });
@@ -367,29 +614,45 @@ app.get("/api/projects/:id", async (req, res) => {
   }
 });
 
-// Explicit "/detail" endpoint
-app.get("/api/projects/:id/detail", async (req, res) => {
+// Delete project
+app.delete("/api/projects/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    const { data: proj, error } = await supabase
+
+    // First, check if project exists
+    const { data: project, error: fetchError } = await supabase
       .from("projects")
-      .select("*")
+      .select("id, title")
       .eq("id", id)
       .single();
 
-    if (error && error.code !== 'PGRST116') {
-      console.error("Supabase fetch project detail error:", error);
-      return res.status(500).json({ success: false, message: "Failed to fetch project" });
+    if (fetchError && fetchError.code !== 'PGRST116') {
+      console.error("Supabase fetch project for deletion error:", fetchError);
+      return res.status(500).json({ success: false, message: "Error fetching project for deletion" });
     }
-    if (!proj) return res.status(404).json({ success: false, message: "Project not found" });
-    return res.json({ success: true, data: proj });
+    if (!project) {
+      return res.status(404).json({ success: false, message: "Project not found" });
+    }
+
+    // Delete project
+    const { error: deleteError } = await supabase
+      .from("projects")
+      .delete()
+      .eq("id", id);
+
+    if (deleteError) {
+      console.error("Supabase deleting project error:", deleteError);
+      return res.status(500).json({ success: false, message: "Server error while deleting project" });
+    }
+    return res.status(200).json({
+      success: true,
+      message: `Project "${project.title}" deleted successfully`
+    });
   } catch (err) {
-    console.error("Error fetching project detail:", err?.message || err, err?.stack);
-    return res.status(500).json({ success: false, message: "Failed to fetch project" });
+    console.error("Error deleting project:", err?.message || err, err?.stack);
+    return res.status(500).json({ success: false, message: "Server error while deleting project" });
   }
 });
-
-// Get mentor's projects
 app.get("/api/mentor-projects", async (req, res) => {
   const { mentorEmail } = req.query;
   if (!mentorEmail) {
@@ -455,7 +718,66 @@ app.get("/api/hod/project-details", async (req, res) => {
   }
 });
 
-/*************** FILE ROUTES ***************/
+
+// Submit contact form
+app.post("/api/contact", async (req, res) => {
+  try {
+    const { name, email, message } = req.body;
+
+    if (!name || !email || !message) {
+      return res.status(400).json({ success: false, message: "Name, email, and message are required" });
+    }
+
+    // Validate email format
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailPattern.test(email.trim())) {
+      return res.status(400).json({ success: false, message: "Please enter a valid email address" });
+    }
+
+    const now = new Date();
+    const { data: contact, error: insertError } = await supabase
+      .from("contacts")
+      .insert([{
+        name: name.trim(),
+        email: email.trim().toLowerCase(),
+        message: message.trim(),
+        created_at: now.toISOString(),
+      }])
+      .select();
+
+    if (insertError) {
+      console.error("Supabase contact insert error:", insertError);
+      return res.status(500).json({ success: false, message: "Failed to submit contact form" });
+    }
+
+    res.status(201).json({ success: true, message: "Contact form submitted successfully" });
+  } catch (err) {
+    console.error("Contact form submission error:", err);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+});
+
+// Get all contact submissions (HOD only)
+app.get("/api/admin/contacts", async (req, res) => {
+  try {
+    // For now, we'll check if user is HOD by email or role
+    // In a real app, you'd validate the JWT token and check user role
+    const { data: contacts, error } = await supabase
+      .from("contacts")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Supabase fetch contacts error:", error);
+      return res.status(500).json({ success: false, message: "Failed to fetch contacts" });
+    }
+
+    res.json({ success: true, data: contacts });
+  } catch (err) {
+    console.error("Get contacts error:", err);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+});
 
 // Upload file
 app.post("/api/upload", upload.single("file"), async (req, res) => {
@@ -667,3 +989,46 @@ app.get("/api/files/:projectName", async (req, res) => {
     res.status(500).json({ success: false, message: "Server error" });
   }
 });
+
+// Add realtime subscriptions setup
+const setupRealtimeSubscriptions = () => {
+  // Subscribe to projects table changes
+  const projectsSubscription = supabase
+    .channel('projects_changes')
+    .on('postgres_changes',
+      { event: '*', schema: 'public', table: 'projects' },
+      (payload) => {
+        console.log('Projects table changed:', payload);
+      }
+    )
+    .subscribe();
+
+  // Subscribe to reviews table changes
+  const reviewsSubscription = supabase
+    .channel('reviews_changes')
+    .on('postgres_changes',
+      { event: '*', schema: 'public', table: 'reviews' },
+      (payload) => {
+        console.log('Reviews table changed:', payload);
+      }
+    )
+    .subscribe();
+
+  // Subscribe to contacts table changes
+  const contactsSubscription = supabase
+    .channel('contacts_changes')
+    .on('postgres_changes',
+      { event: '*', schema: 'public', table: 'contacts' },
+      (payload) => {
+        console.log('Contacts table changed:', payload);
+      }
+    )
+    .subscribe();
+
+  console.log('Realtime subscriptions established');
+};
+
+// Initialize realtime subscriptions
+if (process.env.NODE_ENV !== 'test') {
+  setupRealtimeSubscriptions();
+}

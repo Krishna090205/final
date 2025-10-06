@@ -1,6 +1,6 @@
-import axios from 'axios';
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { supabase } from '../lib/supabase';
 
 
 function Login() {
@@ -13,38 +13,58 @@ function Login() {
     e.preventDefault();
 
     try {
-      
-      let response;
-      const payload = { email }; // Modified payload: removed password
+      const normalizedEmail = email.toLowerCase();
 
-      try {
-        response = await axios.post('http://localhost:5000/api/login', payload); // Corrected endpoint
-      } catch (_) {
-        response = await axios.post('/api/login', payload); // Corrected endpoint
-      }
-      const { success, role, mentorId, userId } = response.data;
+      // Query user from Supabase
+      const { data: user, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('email', normalizedEmail)
+        .single();
 
-      if (success) {
-        // Persist role so Navbar can show Dashboard link
-        if (role) {
-          localStorage.setItem('role', role);
+      if (error) {
+        if (error.code === 'PGRST116') {
+          setLoginError('User not found. Please check your email or sign up.');
+        } else {
+          console.error('Supabase login error:', error);
+          setLoginError('Server error. Please try again later.');
         }
-        if (userId) {
-          localStorage.setItem('userId', userId);
-        }
-        if (role === 'mentor') {
-          localStorage.setItem('mentorId', mentorId); // Save mentorId to localStorage
-          navigate('/mentor-dashboard');
-        } else if (role === 'mentee') {
-          navigate('/mentee-dashboard');
-        } else if (role === 'project_coordinator') {
-          navigate('/project-coordinator-dashboard');
-        } else if (role === 'hod') {
-          navigate('/hod-dashboard');
-        }
-      } else {
-        setLoginError('Login failed. Please check your email.'); // Generic error since no password check
+        return;
       }
+
+      if (!user) {
+        setLoginError('User not found. Please check your email or sign up.');
+        return;
+      }
+
+      // Store complete user information in localStorage
+      const currentUser = {
+        userId: user.id,
+        role: user.role,
+        email: user.email,
+        name: user.name
+      };
+      localStorage.setItem('currentUser', JSON.stringify(currentUser));
+
+      // Also keep individual items for backward compatibility
+      if (user.role) {
+        localStorage.setItem('role', user.role);
+      }
+      if (user.id) {
+        localStorage.setItem('userId', user.id);
+      }
+
+      // Navigate based on role
+      if (user.role === 'mentor') {
+        navigate('/mentor-dashboard');
+      } else if (user.role === 'mentee') {
+        navigate('/mentee-dashboard');
+      } else if (user.role === 'project_coordinator') {
+        navigate('/project-coordinator-dashboard');
+      } else if (user.role === 'hod') {
+        navigate('/hod-dashboard');
+      }
+
     } catch (error) {
       console.error('Login error:', error);
       setLoginError('An error occurred. Please try again later.');

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import axios from 'axios';
+import { supabase } from '../lib/supabase';
 import { motion } from 'framer-motion';
 
 const Star = ({ filled, onClick, size = 22 }) => (
@@ -55,22 +55,59 @@ const ReviewPage = () => {
   const fetchAll = async () => {
     try {
       setLoading(true);
-      let pRes, rRes;
-      try {
-        pRes = await axios.get(`http://localhost:5000/api/projects/${id}/detail`);
-      } catch (_) {
-        pRes = await axios.get(`/api/projects/${id}/detail`);
+
+      // Fetch project
+      const { data: projectData, error: projectError } = await supabase
+        .from('projects')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+      if (projectError) {
+        console.error('Error fetching project:', projectError);
+        setErr('Project not found');
+        return;
       }
-      try {
-        rRes = await axios.get(`http://localhost:5000/api/projects/${id}/reviews`);
-      } catch (_) {
-        rRes = await axios.get(`/api/projects/${id}/reviews`);
+
+      // Fetch reviews with user data
+      const { data: reviewsData, error: reviewsError } = await supabase
+        .from('reviews')
+        .select(`
+          id,
+          project_id,
+          user_id,
+          rating,
+          comment,
+          created_at,
+          users!inner(name, email)
+        `)
+        .eq('project_id', id)
+        .order('created_at', { ascending: false });
+
+      if (reviewsError) {
+        console.error('Error fetching reviews:', reviewsError);
+        setErr('Failed to load reviews');
+        return;
       }
-      setProject(pRes.data?.data || null);
-      setReviews(rRes.data?.data || []);
+
+      // Format reviews for frontend
+      const formattedReviews = reviewsData.map(review => ({
+        id: review.id,
+        projectId: review.project_id,
+        userId: review.user_id,
+        rating: review.rating,
+        comment: review.comment,
+        createdAt: review.created_at,
+        reviewerName: review.users?.name || "Anonymous",
+        reviewerEmail: review.users?.email || ""
+      }));
+
+      setProject(projectData);
+      setReviews(formattedReviews);
       setErr('');
+
     } catch (e) {
-      console.error(e);
+      console.error('Error in fetchAll:', e);
       setErr('Failed to load project or reviews');
     } finally {
       setLoading(false);
@@ -87,19 +124,84 @@ const ReviewPage = () => {
       showToast('error', 'Please select a rating (1-5)');
       return;
     }
+
+    // Get current user
+    const currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}');
+    if (!currentUser.userId) {
+      showToast('error', 'Please log in to submit a review');
+      return;
+    }
+
     setSubmitting(true);
     try {
-      try {
-        await axios.post(`http://localhost:5000/api/projects/${id}/reviews`, { rating, comment });
-      } catch (_) {
-        await axios.post(`/api/projects/${id}/reviews`, { rating, comment });
+      // Check if user already reviewed this project
+      const { data: existingReview, error: existingError } = await supabase
+        .from('reviews')
+        .select('id')
+        .eq('project_id', id)
+        .eq('user_id', currentUser.userId)
+        .single();
+
+      if (existingError && existingError.code !== 'PGRST116') {
+        console.error('Error checking existing review:', existingError);
+        showToast('error', 'Error checking existing review');
+        return;
       }
+
+      if (existingReview) {
+        showToast('error', 'You have already reviewed this project');
+        return;
+      }
+
+      // Insert review
+      const { data: reviewData, error: insertError } = await supabase
+        .from('reviews')
+        .insert([{
+          project_id: id,
+          user_id: currentUser.userId,
+          rating: rating,
+          comment: comment || "",
+          created_at: new Date().toISOString(),
+        }])
+        .select();
+
+      if (insertError) {
+        console.error('Error submitting review:', insertError);
+        showToast('error', 'Failed to submit review');
+        return;
+      }
+
+      // Update project's average rating and count
+      const { data: allReviews, error: fetchReviewsError } = await supabase
+        .from('reviews')
+        .select('rating')
+        .eq('project_id', id);
+
+      if (fetchReviewsError) {
+        console.error('Error fetching reviews for rating update:', fetchReviewsError);
+        // Continue with success response even if rating update fails
+      } else {
+        const totalRating = allReviews.reduce((sum, r) => sum + r.rating, 0);
+        const avgRating = totalRating / allReviews.length;
+        const ratingsCount = allReviews.length;
+
+        const { error: updateProjectError } = await supabase
+          .from('projects')
+          .update({ avgRating, ratingsCount })
+          .eq('id', id);
+
+        if (updateProjectError) {
+          console.error('Error updating project rating:', updateProjectError);
+        }
+      }
+
       setRating(0);
       setComment('');
       showToast('success', 'Review submitted');
       await fetchAll();
-    } catch (e) {
-      console.error(e);
+
+    } catch (error) {
+      console.error('Error submitting review:', error);
       showToast('error', 'Failed to submit review');
     } finally {
       setSubmitting(false);

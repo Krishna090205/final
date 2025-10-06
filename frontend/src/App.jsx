@@ -14,6 +14,7 @@ import ReviewPage from './components/ReviewPage';
 import ProjectDetails from './components/ProjectDetails';
 import About from './components/About';
 import Contact from './components/Contact';
+import SupabaseTest from './components/SupabaseTest';
 
 function App() {
   return (
@@ -31,7 +32,8 @@ function App() {
         <Route path="/mentee-dashboard" element={<MenteeDashboard />} />
         <Route path="/mentor-dashboard" element={<MentorDashboard />} />
         <Route path="/project-coordinator-dashboard" element={<ProjectCoordinatorDashboard />} />
-        <Route path="/hod-dashboard" element={<HODDashboard />} /> 
+        <Route path="/hod-dashboard" element={<HODDashboard />} />
+        <Route path="/test-supabase" element={<SupabaseTest />} />
       </Routes>
     </Router>
   );
